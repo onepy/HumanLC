@@ -39,7 +39,7 @@ class Time(Plugin):
         # 获取当前详细时间
         current_time = self.get_detailed_time()
 
-        # 根据配置决定是否获取IP信息
+        # 使用.get()方法获取配置，如果键不存在则返回默认值False
         ip_info = ""
         if config.get("enable_ip_info", False):
             ip_info = self.get_ip_info()
@@ -55,6 +55,7 @@ class Time(Plugin):
 
         logger.debug(f"[Time] Added time info: {prompt}")
         e_context.action = EventAction.CONTINUE
+
 
     def get_detailed_time(self):
         # 获取当前时间，精确到毫秒
