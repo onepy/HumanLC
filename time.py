@@ -1,40 +1,37 @@
-# encoding:utf-8
-import plugins
-from bridge.context import ContextType
-from bridge.reply import Reply, ReplyType
-from common.log import logger
-from plugins import *
+# plugins/time/time.py
 import datetime
-
+from bridge.reply import Reply, ReplyType
+from bridge.context import ContextType
+import plugins
+from plugins import Event, EventContext, EventAction
 
 @plugins.register(
     name="Time",
-    desc="Adds detailed time information to the beginning of each message before sending to GPT.",
-    version="0.1",
-    author="Pon",
-    desire_priority=990,
+    desc="A simple plugin that adds current time to the prompt",
+    version="1.0",
+    author="pon",
+    desire_priority=990
 )
-class Time(Plugin):
+class TimePlugin(plugins.Plugin):
     def __init__(self):
         super().__init__()
         self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
-        logger.info("[Time] inited")
+        logger.info("[TimePlugin] initialized")
 
     def on_handle_context(self, e_context: EventContext):
-        if e_context['context'].type not in [ContextType.TEXT, ContextType.IMAGE_CREATE]:
-            return  # 只处理文本和图片创建消息
+        # 仅处理文本消息类型
+        if e_context["context"].type != ContextType.TEXT:
+            return
 
-        # 获取当前时间
-        now = datetime.datetime.now()
-        timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
-        prompt = f"Current Time: {timestamp}. Please analyze the following content:
-" # 英文提示prompt
+        # 获取当前时间，格式为 YYYY-MM-DD HH:MM:SS
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # 添加时间信息和prompt到消息内容开头
-        e_context['context'].content = prompt + e_context['context'].content
+        # 获取原始内容
+        original_content = e_context["context"].content
         
-        e_context.action = EventAction.CONTINUE  # 继续交给下一个插件或默认逻辑处理
-
-    def get_help_text(self, **kwargs):
-        return "在消息开头添加时间信息。"
-
+        # 创建新的提示信息
+        prompt = f"The current time is {current_time}. User message: {original_content}"
+        
+        # 更新上下文内容
+        e_context["context"].content = prompt
+        logger.debug(f"[TimePlugin] modified prompt: {prompt}")
