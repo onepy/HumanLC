@@ -26,7 +26,7 @@ class Time(Plugin):
 
         # 将时间信息添加到消息内容中
         original_content = e_context['context'].content
-        modified_content = f"[{time_str}] {original_content}"
+        modified_content = f"{original_content} [{time_str}]"
         e_context['context'].content = modified_content
 
         logger.debug(f"[Time] Modified content to: {modified_content}")
