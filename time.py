@@ -1,7 +1,3 @@
-import time
-from datetime import datetime
-
-from plugins import *
 # encoding:utf-8
 import plugins
 from bridge.context import ContextType
@@ -26,13 +22,13 @@ class Time(Plugin):
 
     def on_handle_context(self, e_context: EventContext):
         if e_context['context'].type not in [ContextType.TEXT, ContextType.IMAGE_CREATE]:
-            return
+            return  # 只处理文本和图片创建消息
 
         # 获取当前时间
         now = datetime.datetime.now()
         timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
         prompt = f"Current Time: {timestamp}. Please analyze the following content:
-"
+" # 英文提示prompt
         
         # 添加时间信息和prompt到消息内容开头
         e_context['context'].content = prompt + e_context['context'].content
@@ -41,3 +37,4 @@ class Time(Plugin):
 
     def get_help_text(self, **kwargs):
         return "在消息开头添加时间信息。"
+
