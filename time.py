@@ -1,8 +1,8 @@
 # plugins/time/time.py
-
 import plugins
 from plugins import *
 from datetime import datetime
+from bridge.context import ContextType # Add this import
 
 @plugins.register(name="Time", desc="Adds timestamp to prompt", version="1.0", author="Bard", desire_priority=990)
 class TimePlugin(Plugin):
@@ -12,9 +12,9 @@ class TimePlugin(Plugin):
 
     def add_timestamp(self, e_context: EventContext):
         context = e_context["context"]
-        if context.type == ContextType.TEXT or context.type == ContextType.IMAGE_CREATE:
+        if context.type in (ContextType.TEXT, ContextType.IMAGE_CREATE): # Use tuple for better readability
             try:
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")  # Use UTC for consistency
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S UTC")
                 if "prompt" in context:
                     context["prompt"] = f"{timestamp}: {context['prompt']}"
                 else:
