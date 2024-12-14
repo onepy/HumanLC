@@ -5,7 +5,7 @@ from datetime import datetime
 from common.log import logger
 import pytz
 
-@plugins.register(name="Time", desc="Adds current time information to text messages.", version="0.1", author="Your Name", desire_priority=0)
+@plugins.register(name="Time", desc="告诉gpt当前时间", version="0.1", author="pon", desire_priority=0)
 class Time(Plugin):
     def __init__(self):
         super().__init__()
@@ -15,7 +15,7 @@ class Time(Plugin):
     def get_current_time_with_timezone(self,timezone_name):
         timezone = pytz.timezone(timezone_name)
         now = datetime.now(timezone)
-        return now.strftime("%Y-%m-%d %H:%M:%S %Z%z")  # 格式化时区信息
+        return now.strftime("%Y-%m-%d %H:%M:%S %Z%z (%A)")  # 格式化时区信息
 
     def on_handle_context(self, e_context: EventContext):
         if e_context['context'].type != ContextType.TEXT:
@@ -33,4 +33,4 @@ class Time(Plugin):
         e_context.action = EventAction.CONTINUE
 
     def get_help_text(self, **kwargs):
-         return "This plugin adds the current time (Asia/Shanghai) to the beginning of text messages."
+         return "告诉GPT当前时间（上海时区）"
