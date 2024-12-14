@@ -5,7 +5,7 @@ from datetime import datetime
 from common.log import logger
 import pytz
 
-@plugins.register(name="Time", desc="告诉gpt当前时间", version="0.1", author="pon", desire_priority=0)
+@plugins.register(name="Time", desc="告诉gpt当前时间", version="0.1", author="pon", desire_priority=990)
 class Time(Plugin):
     def __init__(self):
         super().__init__()
