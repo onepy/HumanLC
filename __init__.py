@@ -1,1 +1,1 @@
-from .HumanLC import *
+from .humanlc import *
