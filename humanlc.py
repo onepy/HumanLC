@@ -2,7 +2,6 @@
 
 import json
 import os
-import threading
 import time
 from datetime import datetime, timedelta
 from collections import deque
@@ -51,7 +50,6 @@ class humanlc(Plugin):
             self.message_cache = deque(maxlen=20)  # 缓存最近20条消息
             self.private_message_cache = {}  # 缓存私聊消息，key是用户ID，value是消息列表
             self.private_message_timers = {} # 缓存私聊消息定时器，key是用户ID,value是定时器对象
-            self.lock = threading.Lock()  # 用于线程安全的锁
             self.group_at_flag = False  # 群聊@标志，初始为False
 
             if conf.get("reply_filter", True):
@@ -65,8 +63,6 @@ class humanlc(Plugin):
             logger.warn(
                 "[Banwords] init failed, ignore or see https://github.com/zhayujie/chatgpt-on-wechat/tree/master/plugins/banwords ."
             )
-            # 这里不应该直接 raise e ,避免插件加载失败
-            # raise e
 
     def _is_message_expired(self, timestamp):
       """
