@@ -15,7 +15,7 @@ from plugins import *
 
 
 @plugins.register(
-    name="HumanLikeChat",
+    name="HumanLC",
     desire_priority=990,  # 高优先级，确保先处理
     hidden=True,
     desc="模拟人类对话行为，改善机器人回复的自然性",
