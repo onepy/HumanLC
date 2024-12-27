@@ -8,12 +8,13 @@ from common.log import logger
 from plugins import *
 from config import conf
 from common import memory
-
+import os
+import json
 
 @plugins.register(
     name="HumanEmulator",
     desire_priority=800,
-    hidden=False,
+    hidden=True,
     desc="Emulates human-like conversation by caching messages.",
     version="0.2",
     author="onepy",
@@ -156,7 +157,6 @@ class HumanEmulator(Plugin):
         help_text += f"私聊消息累积阈值: {self.PRIVATE_MSG_THRESHOLD} 条。
 "
         return help_text
-
     def _load_config_template(self):
         logger.debug("No HumanEmulator plugin config.json, use plugins/humanemulator/config.json.template")
         try:
