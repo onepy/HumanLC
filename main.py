@@ -9,17 +9,14 @@ import plugins
 from bridge.context import ContextType, Context
 from bridge.reply import Reply, ReplyType
 from common.log import logger
-from plugins import Event, EventAction, EventContext, Plugin
 from plugins import *
-
 
 @plugins.register(
     name="HumanEmulator",
-    desire_priority=800,
-    hidden=False,
+    desire_priority= 800,
     desc="模拟人类对话行为的插件",
     version="1.0",
-    author="chatgpt",
+    author="onepy",
 )
 class HumanEmulator(Plugin):
     def __init__(self):
