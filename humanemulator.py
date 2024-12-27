@@ -1,6 +1,8 @@
 import time
 import threading
 import plugins
+import os
+import json
 from bridge.context import ContextType, Event, EventAction, EventContext
 from bridge.reply import Reply, ReplyType
 from channel.chat_message import ChatMessage
@@ -12,11 +14,11 @@ from common import memory
 
 @plugins.register(
     name="HumanEmulator",
-    desire_priority=990,
-    hidden=false,
+    desire_priority=998,
+    hidden=True,
     desc="Emulates human-like conversation by caching messages.",
     version="0.2",
-    author="onepy",
+    author="Your Name",
 )
 class HumanEmulator(Plugin):
     MAX_CACHE_SIZE = 20
@@ -26,16 +28,6 @@ class HumanEmulator(Plugin):
     
     def __init__(self):
         super().__init__()
-        def __init__(self):
-        super().__init__()
-        try:
-           ...
-            logger.info("[HumanEmulator] inited successfully")  # 添加日志
-            ...
-        except Exception as e:
-            logger.error(f"[HumanEmulator]初始化异常：{e}")
-            raise "[HumanEmulator] init failed, ignore "
-
         self.message_cache = {}
         self.private_sessions = {}
         try:
@@ -61,6 +53,10 @@ class HumanEmulator(Plugin):
     def _stop_timer(self):
         if self._timer and self._timer.is_alive():
             self._timer.cancel()
+    
+    def stop(self):
+        self._stop_timer()
+        logger.info("[HumanEmulator] stopped")
     
     def _check_and_send_private_messages(self):
         try:
@@ -177,7 +173,3 @@ class HumanEmulator(Plugin):
                     return plugin_conf
         except Exception as e:
             logger.exception(e)
-
-    def __del__(self):
-        self._stop_timer()
-
