@@ -26,6 +26,16 @@ class HumanEmulator(Plugin):
     
     def __init__(self):
         super().__init__()
+        def __init__(self):
+        super().__init__()
+        try:
+           ...
+            logger.info("[HumanEmulator] inited successfully")  # 添加日志
+            ...
+        except Exception as e:
+            logger.error(f"[HumanEmulator]初始化异常：{e}")
+            raise "[HumanEmulator] init failed, ignore "
+
         self.message_cache = {}
         self.private_sessions = {}
         try:
