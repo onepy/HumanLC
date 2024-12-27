@@ -1,0 +1,6 @@
+{
+  "max_cache_size": 20,
+  "cache_expiry_time": 3600,
+  "private_msg_timeout": 10,
+  "private_msg_threshold": 5
+}
