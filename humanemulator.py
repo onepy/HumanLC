@@ -12,11 +12,11 @@ from common import memory
 
 @plugins.register(
     name="HumanEmulator",
-    desire_priority=998,
-    hidden=True,
+    desire_priority=990,
+    hidden=false,
     desc="Emulates human-like conversation by caching messages.",
     version="0.2",
-    author="Your Name",
+    author="onepy",
 )
 class HumanEmulator(Plugin):
     MAX_CACHE_SIZE = 20
