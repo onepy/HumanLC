@@ -16,8 +16,7 @@ from plugins import *
 
 @plugins.register(
     name="HumanLC",
-    desire_priority=950,  # 高优先级，确保先处理
-    hidden=True,
+    desire_priority=950,
     desc="模拟人类对话行为，改善机器人回复的自然性",
     version="1.0",
     author="AI",
