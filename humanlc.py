@@ -1,5 +1,7 @@
+# encoding:utf-8
 import time
-from collections import deque
+import threading
+from datetime import datetime, timedelta
 import plugins
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
@@ -8,96 +10,79 @@ from plugins import *
 
 
 @plugins.register(
-    name="humanlc",
-    desire_priority=950,
-    desc="Simulates human conversation behavior.",
+    name="HumanLikeChat",
+    desire_priority=990,
+    desc="Simulates human-like conversation behavior.",
     version="0.1",
-    author="Your Name",
+    author="YourName",
 )
-class humanlc(Plugin):
+class HumanLikeChat(Plugin):
     def __init__(self):
         super().__init__()
-        self.message_cache = deque(maxlen=20)  # 缓存最近的20条消息
-        self.group_message_cache = {}  # 群聊消息缓存，key为group_id
+        self.message_cache = []  # 缓存消息列表
+        self.message_limit = 20  # 缓存消息数量限制
+        self.lock = threading.Lock() # 线程锁，用于保护消息缓存
+        self.group_cache = {} # 群聊缓存消息
         self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
-        self.last_cleanup_time = time.time()
         logger.info("[HumanLikeChat] inited")
-        self.cleanup_interval = 300  # 5分钟清理一次过期缓存
 
-    def _cleanup_expired_messages(self):
-        """清除过期消息"""
-        now = time.time()
-        
-        
-        # 清理通用消息缓存
-        while self.message_cache and now - self.message_cache[0]["timestamp"] > 3600:
-            self.message_cache.popleft()
-        
-        # 清理群聊消息缓存
-        expired_groups = []
-        for group_id, messages in self.group_message_cache.items():
-            while messages and now - messages[0]["timestamp"] > 3600:
-               messages.pop(0)
-            if not messages:
-                 expired_groups.append(group_id)
-        for group_id in expired_groups:
-              del self.group_message_cache[group_id]
+    def _add_message(self, sender, content, is_group=False):
+        with self.lock: # 加锁保护
+            timestamp = datetime.now()
+            self.message_cache.append({"sender": sender, "content": content, "timestamp": timestamp, "is_group": is_group})
+            if len(self.message_cache) > self.message_limit:
+                self.message_cache.pop(0)  # 移除最旧的消息
 
+    def _clear_expired_messages(self):
+        with self.lock: # 加锁保护
+            now = datetime.now()
+            self.message_cache = [msg for msg in self.message_cache if now - msg["timestamp"] <= timedelta(hours=1)]
+
+    def _get_cached_messages(self):
+        with self.lock: # 加锁保护
+            self._clear_expired_messages()
+            return self.message_cache.copy()  # 返回消息副本
+
+    def _clear_cache(self, session_id):
+        with self.lock:
+            if session_id in self.group_cache:
+                del self.group_cache[session_id]
 
     def on_handle_context(self, e_context: EventContext):
-        # 每隔一段时间清除过期消息
-        if time.time() - self.last_cleanup_time > self.cleanup_interval:
-            self._cleanup_expired_messages()
-            self.last_cleanup_time = time.time()
-        
         context = e_context["context"]
-        msg = context.get("msg")
-        if not msg:
+        if context.type not in [ContextType.TEXT, ContextType.VOICE]: # 只处理文本和语音消息
             return
 
+        msg = context["msg"]
+        sender = msg.from_user_nickname
+        content = context.content
         is_group = context.get("isgroup", False)
+        session_id = context["session_id"]
 
-        message_info = {
-            "sender": msg.from_user_nickname,
-            "content": context.content,
-            "timestamp": time.time(),
-            "is_group": is_group,
-            "actual_user_id": msg.actual_user_id,
-        }
-        self.message_cache.append(message_info)
 
-        if is_group:  # 群聊消息处理
-            group_id = msg.other_user_id
-            if group_id not in self.group_message_cache:
-                self.group_message_cache[group_id] = []
-            self.group_message_cache[group_id].append(message_info)
+        self._add_message(sender, content, is_group)  # 缓存所有消息
 
-            if not msg.is_at:
-                logger.debug(
-                    f"[HumanLikeChat] Group message cached, not at bot, group_id={group_id}, content={context.content}"
-                )
-                e_context.action = EventAction.BREAK_PASS  # 不发送给GPT
-            else:
-                # @ 机器人
-                logger.debug(
-                    f"[HumanLikeChat] Group message at bot, group_id={group_id}, content={context.content}"
-                )
-                # 获取群聊缓存的消息，拼接后发送给 GPT
-                if group_id in self.group_message_cache:
-                  group_messages = self.group_message_cache.get(group_id,[])
-                  context.content = "
-".join(
-                      [f"{m['sender']}: {m['content']}" for m in group_messages]
-                  )
-                  del self.group_message_cache[group_id]
-                  
-        else:
-            # 私聊消息直接发送给GPT
-             logger.debug(
-                    f"[HumanLikeChat] Private message, content={context.content}"
-                )
-
+        if is_group:
+            if not context["msg"].is_at:  # 群聊，非at消息直接缓存
+                 if session_id not in self.group_cache:
+                     self.group_cache[session_id] = []
+                 self.group_cache[session_id].append({"sender": sender, "content": content, "timestamp": datetime.now()})
+                 e_context.action = EventAction.BREAK_PASS  # 不往下传递给其他插件，直接结束
+                 return
+            else: # 群聊，at消息，则提取缓存消息给gpt
+                if session_id in self.group_cache:
+                    cached_messages = self.group_cache.get(session_id)
+                    prompt = ""
+                    for message in cached_messages:
+                         prompt += f"{message['sender']}: {message['content']}
+"
+                    prompt += f"{sender}：{content}"
+                    context.content = prompt
+                    self._clear_cache(session_id)
+                else:
+                    return
+        # 私聊信息直接发送给gpt
         e_context.action = EventAction.CONTINUE
 
     def get_help_text(self, **kwargs):
-        return "Simulates human-like chat behavior, including caching messages and delayed responses in groups."
+        return "Simulates human-like conversation behavior with message caching."
