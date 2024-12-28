@@ -3,73 +3,54 @@ from common.log import logger
 from plugins import *
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
-import threading
 import time
-from collections import deque
+import threading
 
-@plugins.register(name="humanlc", desc="A plugin that handles private messages with delay and accumulation", version="0.2", author="Your Name")
+@plugins.register(name="humanlc", desc="A simple plugin that delays and accumulates private messages", version="0.2", author="Pon")
 class humanlc(Plugin):
     def __init__(self):
         super().__init__()
         self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
-        self.message_queues = {}  # Stores message queues for each user
-        self.timers = {}  # Stores timers for each user
-        self.lock = threading.Lock() #Lock for thread safe access
-        self.delay_seconds = 10
-        self.max_messages = 5
+        self.accumulated_messages = {}  # 用户 ID -> [消息列表, 最后消息时间]
+        self.lock = threading.Lock()  # 用于线程安全的锁
         logger.info("[humanlc] inited")
 
     def on_handle_context(self, e_context: EventContext):
-        if e_context['context'].type != ContextType.TEXT or e_context['context'].get("isgroup",False):
-            return  # only process private text messages
+        if e_context["context"].type != ContextType.TEXT:
+            return  # 只处理文本消息
         
-        msg = e_context['context']['msg']
+        msg = e_context["context"]["msg"]
         user_id = msg.from_user_id
-        content = e_context['context'].content
-        
+        if e_context["context"].get("isgroup", False):
+            return  # 跳过群聊消息
+            
         with self.lock:
-            if user_id not in self.message_queues:
-                self.message_queues[user_id] = deque()
-                self.timers[user_id] = None
+            if user_id not in self.accumulated_messages:
+                self.accumulated_messages[user_id] = [[], None]
+            
+            message_list, last_message_time = self.accumulated_messages[user_id]
+            message_list.append(e_context["context"].content)
+            current_time = time.time()
+            self.accumulated_messages[user_id][1] = current_time
 
-            self.message_queues[user_id].append(e_context)
-        
-            if len(self.message_queues[user_id]) >= self.max_messages:
-                 self._process_messages(user_id)
-                 return
-
-            if self.timers[user_id]:
-                self.timers[user_id].cancel()
-                
-            self.timers[user_id] = threading.Timer(self.delay_seconds, self._process_messages, args=[user_id])
-            self.timers[user_id].start()
-        e_context.action = EventAction.BREAK_PASS #不让其他插件或者默认处理逻辑处理，等待累积到一起处理
-
-    def _process_messages(self, user_id):
-        with self.lock:
-            if user_id not in self.message_queues or not self.message_queues[user_id]:
-                return
-
-            messages = list(self.message_queues[user_id])
-            self.message_queues[user_id].clear()
-            if self.timers[user_id]:
-                self.timers[user_id].cancel()
-                self.timers[user_id] = None
-
-
-        combined_content = ""
-        for e_context in messages:
-             combined_content += e_context['context'].content+"
-"
-        
-        combined_reply = Reply(ReplyType.TEXT, f"Combined messages:
-{combined_content}")
-        
-        
-        e_context_to_send = messages[0].copy()
-        e_context_to_send['reply'] = combined_reply
-        e_context_to_send.action = EventAction.CONTINUE #让后续的插件和默认逻辑处理
-        PluginManager().emit_event(EventContext(Event.ON_DECORATE_REPLY, e_context_to_send))
-        PluginManager().emit_event(EventContext(Event.ON_SEND_REPLY, e_context_to_send))
-        
-        logger.debug(f"[humanlc] Processed messages for user {user_id}")
+        if len(message_list) < 5:
+            time.sleep(10)  # 等待10秒
+            with self.lock:
+                if self.accumulated_messages[user_id][1] == current_time:
+                    # 10秒内没有新消息
+                    e_context["context"].content = " ".join(message_list)
+                    self.accumulated_messages[user_id] = [[], None]  # 清空消息列表
+                    logger.debug(f"[humanlc] userId:{user_id} accumulate_messages timeout, pass on to the next level. content: {e_context['context'].content}")
+                    return  # 传递给下一个插件或默认逻辑
+                else:
+                    # 10秒内有新消息，拦截
+                    e_context.action = EventAction.BREAK_PASS
+                    logger.debug(f"[humanlc] userId:{user_id} accumulate_messages, count:{len(message_list)}, intercept message. content: {e_context['context'].content}")
+                    return # 拦截消息
+        else:
+            # 累积够5条消息
+            with self.lock:
+                e_context["context"].content = " ".join(message_list)
+                self.accumulated_messages[user_id] = [[], None]  # 清空消息列表
+            logger.debug(f"[humanlc] userId:{user_id} accumulate_messages reach 5, pass on to the next level. content: {e_context['context'].content}")
+            return # 传递给下一个插件或默认逻辑
