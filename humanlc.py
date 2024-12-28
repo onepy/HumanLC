@@ -1,88 +1,51 @@
+# encoding: utf-8
+
 import plugins
-from common.log import logger
-from plugins import *
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
-import time
-import threading
+from common.log import logger
+from plugins import *
 
-@plugins.register(name="humanlc", desc="A simple plugin that delays and accumulates private messages", version="0.3", author="Pon")
-class humanlc(Plugin):
+@plugins.register(
+    name="HumanLC",
+    desire_priority=500,  # 设置较高的优先级，确保在其他插件之前拦截消息
+    hidden=False,
+    desc="A plugin that intercepts private chat messages and concatenates them before passing to the next step.",
+    version="0.1",
+    author="YourName",
+)
+class HumanLC(Plugin):
     def __init__(self):
         super().__init__()
+        self.intercept_count = 5  # 拦截次数
+        self.intercepted_messages = {}  # 用于存储拦截的消息
         self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
-        self.accumulated_messages = {}  # 用户 ID -> [消息列表, 最后消息时间, threading.Event()]
-        self.lock = threading.Lock()  # 用于线程安全的锁
-        logger.info("[humanlc] inited")
+        logger.info("[HumanLC] inited")
 
     def on_handle_context(self, e_context: EventContext):
-        if e_context["context"].type != ContextType.TEXT:
-            return  # 只处理文本消息
+        context = e_context["context"]
 
-        msg = e_context["context"]["msg"]
-        user_id = msg.from_user_id
-        if e_context["context"].get("isgroup", False):
-            return  # 跳过群聊消息
+        # 只拦截私聊消息
+        if not context.get("isgroup", False):
+            session_id = context["session_id"]
+            content = context.content
 
-        with self.lock:
-            if user_id not in self.accumulated_messages:
-                event = threading.Event()
-                self.accumulated_messages[user_id] = [[], None, event]
-            message_list, last_message_time, event = self.accumulated_messages[user_id]
-            message_list.append(e_context["context"].content)
-            current_time = time.time()
-            self.accumulated_messages[user_id][1] = current_time
+            if session_id not in self.intercepted_messages:
+                self.intercepted_messages[session_id] = []
 
-        if len(message_list) < 5:
-            if not event.is_set():  # 如果没有设置超时
-                threading.Thread(target=self.wait_timeout, args=(user_id, current_time, e_context), daemon=True).start()  # 创建新的线程进行超时等待
-                logger.debug(f"[humanlc] userId:{user_id} accumulate_messages, count:{len(message_list)}, intercept message. content: {e_context['context'].content}")
-                e_context.action = EventAction.BREAK_PASS # 拦截消息，不传递给后续流程
-                return
+            self.intercepted_messages[session_id].append(content)
+
+            # 拦截次数达到5次时，拼接消息并继续处理
+            if len(self.intercepted_messages[session_id]) >= self.intercept_count:
+                concatenated_message = " ".join(self.intercepted_messages[session_id])
+                context.content = concatenated_message
+                self.intercepted_messages[session_id] = []  # 清空拦截的消息
+                e_context.action = EventAction.CONTINUE  # 继续交给下个插件处理
             else:
-                # 超时线程处理过了，消息传递给下一个流程
-                with self.lock:
-                    if user_id in self.accumulated_messages:
-                        self.accumulated_messages[user_id][2].clear() # 清除超时标记
-                return
+                e_context.action = EventAction.BREAK_PASS  # 拦截消息，不继续处理
         else:
-            # 累积够5条消息
-            with self.lock:
-                combined_message = " ".join(message_list)
-                self.accumulated_messages[user_id] = [[], None, threading.Event()]  # 清空消息列表
-                
-                # 创建 Reply 对象并设置回复内容
-                reply = Reply()
-                reply.type = ReplyType.TEXT
-                reply.content = combined_message
-                e_context['reply'] = reply  # 将回复对象赋值给 e_context
-                
-                e_context.action = EventAction.CONTINUE  # 中断当前流程并传递给下一个流程
-                
-            logger.debug(f"[humanlc] userId:{user_id} accumulate_messages reach 5, sending combined message. content: {combined_message}")
-            return
+            e_context.action = EventAction.CONTINUE  # 群聊消息正常处理
 
-
-    def wait_timeout(self, user_id, current_time, e_context):
-        event = self.accumulated_messages[user_id][2]
-        if event.wait(10): # 设置超时时间
-            return # 被其他消息线程设置超时了
-  
-        with self.lock:
-            if user_id not in self.accumulated_messages:
-                return
-            message_list, last_message_time, _ = self.accumulated_messages[user_id]
-            if last_message_time == current_time and len(message_list) > 0: # 10秒内没有收到新消息,并且有消息需要处理
-                combined_message = " ".join(message_list)
-                self.accumulated_messages[user_id] = [[], None, threading.Event()] # 清空消息列表
-                
-                # 创建 Reply 对象并设置回复内容
-                reply = Reply()
-                reply.type = ReplyType.TEXT
-                reply.content = combined_message
-                e_context['reply'] = reply  # 将回复对象赋值给 e_context
-                
-                e_context.action = EventAction.CONTINUE  # 中断当前流程并传递给下一个流程
-                
-                logger.debug(f"[humanlc] userId:{user_id} accumulate_messages timeout, sending combined message. content: {combined_message}")
-                event.set()
+    def get_help_text(self, **kwargs):
+        help_text = "HumanLC插件会拦截私聊消息，并在拦截5次后将消息拼接在一起，然后继续处理。"
+        return help_text
