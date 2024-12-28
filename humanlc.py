@@ -13,7 +13,7 @@ from plugins import *
     desire_priority=500,  # 设置较高的优先级，确保在其他插件之前拦截消息
     hidden=False,
     desc="A plugin that intercepts private chat messages and concatenates them before passing to the next step. Includes a timeout mechanism.",
-    version="0.2",
+    version="0.3",
     author="YourName",
 )
 class HumanLC(Plugin):
@@ -60,7 +60,7 @@ class HumanLC(Plugin):
 
     def timeout_handler(self, session_id, e_context):
         """超时处理函数，触发时将当前拦截的消息发送给后续插件或默认消息处理逻辑"""
-        if session_id in self.intercepted_messages:
+        if session_id in self.intercepted_messages and len(self.intercepted_messages[session_id]) > 0:
             self.process_intercepted_messages(session_id, e_context)
 
     def process_intercepted_messages(self, session_id, e_context):
@@ -68,6 +68,7 @@ class HumanLC(Plugin):
         concatenated_message = " ".join(self.intercepted_messages[session_id])
         e_context["context"].content = concatenated_message
         self.intercepted_messages[session_id] = []  # 清空拦截的消息
+        self.timers.pop(session_id, None)  # 移除计时器
         e_context.action = EventAction.CONTINUE  # 继续交给下个插件处理
 
     def get_help_text(self, **kwargs):
