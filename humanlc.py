@@ -19,8 +19,8 @@ class humanlc(Plugin):
         if e_context["context"].type != ContextType.TEXT:
             return  # 只处理文本消息
 
-        msg = e_context["context"].content
-        user_id = e_context["context"]["user_id"]
+        msg = e_context["context"]["msg"]
+        user_id = msg.from_user_id
         if e_context["context"].get("isgroup", False):
             return  # 跳过群聊消息
 
@@ -29,7 +29,7 @@ class humanlc(Plugin):
                 event = threading.Event()
                 self.accumulated_messages[user_id] = [[], None, event]
             message_list, last_message_time, event = self.accumulated_messages[user_id]
-            message_list.append(msg)
+            message_list.append(e_context["context"].content)
             current_time = time.time()
             self.accumulated_messages[user_id][1] = current_time
 
@@ -43,19 +43,23 @@ class humanlc(Plugin):
                 # 超时线程处理过了，消息传递给下一个流程
                 with self.lock:
                     if user_id in self.accumulated_messages:
-                      self.accumulated_messages[user_id][2].clear()
+                        self.accumulated_messages[user_id][2].clear() # 清除超时标记
                 return
         else:
             # 累积够5条消息
             with self.lock:
                 combined_message = " ".join(message_list)
                 self.accumulated_messages[user_id] = [[], None, threading.Event()]  # 清空消息列表
+                
+                # 创建 Reply 对象并设置回复内容
                 reply = Reply()
                 reply.type = ReplyType.TEXT
                 reply.content = combined_message
-                e_context['reply'] = reply
-                e_context.action = EventAction.CONTINUE  # 明确设置传递给下一个插件或者默认处理逻辑
-            logger.debug(f"[humanlc] userId:{user_id} accumulate_messages reach 5, pass on to the next level. content: {combined_message}")
+                e_context['reply'] = reply  # 将回复对象赋值给 e_context
+                
+                e_context.action = EventAction.BREAK_PASS  # 中断当前流程并传递给下一个流程
+                
+            logger.debug(f"[humanlc] userId:{user_id} accumulate_messages reach 5, sending combined message. content: {combined_message}")
             return
 
 
@@ -63,7 +67,7 @@ class humanlc(Plugin):
         event = self.accumulated_messages[user_id][2]
         if event.wait(10): # 设置超时时间
             return # 被其他消息线程设置超时了
-    
+  
         with self.lock:
             if user_id not in self.accumulated_messages:
                 return
@@ -71,10 +75,14 @@ class humanlc(Plugin):
             if last_message_time == current_time and len(message_list) > 0: # 10秒内没有收到新消息,并且有消息需要处理
                 combined_message = " ".join(message_list)
                 self.accumulated_messages[user_id] = [[], None, threading.Event()] # 清空消息列表
+                
+                # 创建 Reply 对象并设置回复内容
                 reply = Reply()
                 reply.type = ReplyType.TEXT
                 reply.content = combined_message
-                e_context['reply'] = reply
-                e_context.action = EventAction.CONTINUE  # 明确设置传递给下一个插件或者默认处理逻辑
-                logger.debug(f"[humanlc] userId:{user_id} accumulate_messages timeout, pass on to the next level. content: {combined_message}")
+                e_context['reply'] = reply  # 将回复对象赋值给 e_context
+                
+                e_context.action = EventAction.BREAK_PASS  # 中断当前流程并传递给下一个流程
+                
+                logger.debug(f"[humanlc] userId:{user_id} accumulate_messages timeout, sending combined message. content: {combined_message}")
                 event.set()
