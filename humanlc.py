@@ -6,7 +6,7 @@ from bridge.reply import Reply, ReplyType
 import time
 import threading
 
-@plugins.register(name="humanlc", desc="A simple plugin that delays and accumulates private messages", version="0.4", author="Your Name")
+@plugins.register(name="humanlc", desc="A simple plugin", version="0.1", author="Pon")
 class humanlc(Plugin):
     def __init__(self):
         super().__init__()
@@ -34,18 +34,21 @@ class humanlc(Plugin):
             self.accumulated_messages[user_id][1] = current_time
 
         if len(message_list) < 5:
-             if not event.is_set():  # 如果没有设置超时，则拦截
-                threading.Thread(target=self.wait_timeout, args=(user_id, current_time, e_context), daemon=True).start()
-             e_context.action = EventAction.BREAK_PASS  # 拦截消息
-             logger.debug(f"[humanlc] userId:{user_id} accumulate_messages, count:{len(message_list)}, intercept message. content: {e_context['context'].content}")
-             return # 拦截消息
+            if not event.is_set():  # 如果没有设置超时
+                threading.Thread(target=self.wait_timeout, args=(user_id, current_time, e_context), daemon=True).start()  # 创建新的线程进行超时等待
+                logger.debug(f"[humanlc] userId:{user_id} accumulate_messages, count:{len(message_list)}, intercept message. content: {e_context['context'].content}")
+                return  # 不设置 e_context.action， 保持默认的 EventAction.CONTINUE
+            else: # 已经超时了，直接返回，清空event
+                with self.lock:
+                    event.clear()
         else:
-            # 累积够5条消息
+             # 累积够5条消息
              with self.lock:
                 e_context["context"].content = " ".join(message_list)
-                self.accumulated_messages[user_id] = [[], None, threading.Event()]  # 清空消息列表
+                self.accumulated_messages[user_id] = [[], None, event]  # 清空消息列表
              logger.debug(f"[humanlc] userId:{user_id} accumulate_messages reach 5, pass on to the next level. content: {e_context['context'].content}")
-             return
+             return  # 默认传递给下一个流程
+
 
     def wait_timeout(self, user_id, current_time, e_context):
         event = self.accumulated_messages[user_id][2]
@@ -53,10 +56,9 @@ class humanlc(Plugin):
             return # 被其他消息线程设置超时了
 
         with self.lock:
-           message_list, last_message_time, _ = self.accumulated_messages[user_id]
-           if last_message_time == current_time:  # 10秒内没有收到新消息
-               e_context["context"].content = " ".join(message_list)
-               self.accumulated_messages[user_id] = [[], None, threading.Event()]  # 清空消息列表
-               event.set()
-               logger.debug(f"[humanlc] userId:{user_id} accumulate_messages timeout, pass on to the next level. content: {e_context['context'].content}")
-
+            message_list, last_message_time, _ = self.accumulated_messages[user_id]
+            if last_message_time == current_time: # 10秒内没有收到新消息
+                e_context["context"].content = " ".join(message_list)
+                self.accumulated_messages[user_id] = [[], None, threading.Event()] # 清空消息列表
+                event.set() # 设置超时
+                logger.debug(f"[humanlc] userId:{user_id} accumulate_messages timeout, pass on to the next level. content: {e_context['context'].content}")
