@@ -6,7 +6,7 @@ from bridge.reply import Reply, ReplyType
 import time
 import threading
 
-@plugins.register(name="humanlc", desc="A simple plugin that delays and accumulates private messages", version="0.2", author="Pon")
+@plugins.register(name="humanlc", desc="A simple plugin that delays and accumulates private messages", version="0.3", author="Pon")
 class humanlc(Plugin):
     def __init__(self):
         super().__init__()
@@ -68,4 +68,3 @@ class humanlc(Plugin):
                 self.accumulated_messages[user_id] = [[], None, threading.Event()] # 清空消息列表
                 logger.debug(f"[humanlc] userId:{user_id} accumulate_messages timeout, pass on to the next level. content: {e_context['context'].content}")
                 event.set()
-            
