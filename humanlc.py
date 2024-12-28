@@ -9,11 +9,11 @@ from plugins import *
 
 @plugins.register(
     name="HumanLC",
-    desire_priority=950,  # 设置较高的优先级，确保在其他插件之前拦截消息
+    desire_priority=500,  # 设置较高的优先级，确保在其他插件之前拦截消息
     hidden=False,
     desc="A plugin that intercepts private chat messages and concatenates them before passing to the next step. Includes a timeout mechanism.",
-    version="0.3",
-    author="Pon",
+    version="0.4",
+    author="YourName",
 )
 class HumanLC(Plugin):
     def __init__(self):
@@ -42,10 +42,10 @@ class HumanLC(Plugin):
 
             self.intercepted_messages[session_id].append(content)
 
-            # 检查是否达到拦截次数或超时
-            if len(self.intercepted_messages[session_id]) >= self.intercept_count:
+            # 检查是否超时
+            if self.is_timeout(session_id, current_time):
                 self.process_intercepted_messages(session_id, e_context)
-            elif self.is_timeout(session_id, current_time):
+            elif len(self.intercepted_messages[session_id]) >= self.intercept_count:
                 self.process_intercepted_messages(session_id, e_context)
             else:
                 e_context.action = EventAction.BREAK_PASS  # 拦截消息，不继续处理
