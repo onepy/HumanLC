@@ -57,7 +57,7 @@ class humanlc(Plugin):
                 reply.content = combined_message
                 e_context['reply'] = reply  # 将回复对象赋值给 e_context
                 
-                e_context.action = EventAction.BREAK_PASS  # 中断当前流程并传递给下一个流程
+                e_context.action = EventAction.CONTINUE  # 中断当前流程并传递给下一个流程
                 
             logger.debug(f"[humanlc] userId:{user_id} accumulate_messages reach 5, sending combined message. content: {combined_message}")
             return
@@ -82,7 +82,7 @@ class humanlc(Plugin):
                 reply.content = combined_message
                 e_context['reply'] = reply  # 将回复对象赋值给 e_context
                 
-                e_context.action = EventAction.BREAK_PASS  # 中断当前流程并传递给下一个流程
+                e_context.action = EventAction.CONTINUE  # 中断当前流程并传递给下一个流程
                 
                 logger.debug(f"[humanlc] userId:{user_id} accumulate_messages timeout, sending combined message. content: {combined_message}")
                 event.set()
