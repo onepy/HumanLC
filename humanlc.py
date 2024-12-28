@@ -50,8 +50,9 @@ class humanlc(Plugin):
             with self.lock:
                 e_context["context"].content = " ".join(message_list)
                 self.accumulated_messages[user_id] = [[], None, threading.Event()]  # 清空消息列表
+                e_context.action = EventAction.CONTINUE  # 明确设置传递给下一个插件或者默认处理逻辑
             logger.debug(f"[humanlc] userId:{user_id} accumulate_messages reach 5, pass on to the next level. content: {e_context['context'].content}")
-            return  # 默认传递给下一个流程
+            return
 
 
     def wait_timeout(self, user_id, current_time, e_context):
@@ -66,5 +67,6 @@ class humanlc(Plugin):
             if last_message_time == current_time and len(message_list) > 0: # 10秒内没有收到新消息,并且有消息需要处理
                 e_context["context"].content = " ".join(message_list)
                 self.accumulated_messages[user_id] = [[], None, threading.Event()] # 清空消息列表
+                e_context.action = EventAction.CONTINUE  # 明确设置传递给下一个插件或者默认处理逻辑
                 logger.debug(f"[humanlc] userId:{user_id} accumulate_messages timeout, pass on to the next level. content: {e_context['context'].content}")
                 event.set()
