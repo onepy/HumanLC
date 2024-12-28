@@ -2,60 +2,74 @@ import plugins
 from common.log import logger
 from plugins import *
 from bridge.context import ContextType
-from datetime import datetime, timedelta
+from bridge.reply import Reply, ReplyType
+import threading
+import time
+from collections import deque
 
-@plugins.register(name="humanlc", desc="A simple plugin that caches and outputs recent group messages", version="0.3", author="Pon")
+@plugins.register(name="humanlc", desc="A plugin that handles private messages with delay and accumulation", version="0.2", author="Your Name")
 class humanlc(Plugin):
     def __init__(self):
         super().__init__()
-        self.message_cache = []
-        self.max_cache_size = 30
-        self.max_message_age = timedelta(hours=1)
         self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
+        self.message_queues = {}  # Stores message queues for each user
+        self.timers = {}  # Stores timers for each user
+        self.lock = threading.Lock() #Lock for thread safe access
+        self.delay_seconds = 10
+        self.max_messages = 5
         logger.info("[humanlc] inited")
 
     def on_handle_context(self, e_context: EventContext):
-        if e_context['context'].type != ContextType.TEXT:
-          return
-
+        if e_context['context'].type != ContextType.TEXT or e_context['context'].get("isgroup",False):
+            return  # only process private text messages
+        
         msg = e_context['context']['msg']
-        if not e_context['context'].get("isgroup", False):
-          return
+        user_id = msg.from_user_id
+        content = e_context['context'].content
+        
+        with self.lock:
+            if user_id not in self.message_queues:
+                self.message_queues[user_id] = deque()
+                self.timers[user_id] = None
 
-        # 群聊消息缓存
-        if msg and msg.from_user_id and msg.content:
-          self.cache_message(msg.actual_user_nickname, msg.content)
+            self.message_queues[user_id].append(e_context)
+        
+            if len(self.message_queues[user_id]) >= self.max_messages:
+                 self._process_messages(user_id)
+                 return
 
-        # 清理过期消息
-        self.cleanup_expired_messages()
+            if self.timers[user_id]:
+                self.timers[user_id].cancel()
+                
+            self.timers[user_id] = threading.Timer(self.delay_seconds, self._process_messages, args=[user_id])
+            self.timers[user_id].start()
+        e_context.action = EventAction.BREAK_PASS #不让其他插件或者默认处理逻辑处理，等待累积到一起处理
 
-        # 如果被艾特,拼接消息
-        if e_context['context'].get("isgroup",False) and msg.is_at:
-            cached_messages = self.get_cached_messages()
-            if cached_messages:
-                e_context['context'].content = "
-".join(cached_messages)
-                logger.debug(f"[humanlc] Cached messages: 
-{e_context['context'].content}")
-            else:
-                logger.debug(f"[humanlc] No cached messages")
+    def _process_messages(self, user_id):
+        with self.lock:
+            if user_id not in self.message_queues or not self.message_queues[user_id]:
+                return
 
-        e_context.action = EventAction.CONTINUE 
-        return
+            messages = list(self.message_queues[user_id])
+            self.message_queues[user_id].clear()
+            if self.timers[user_id]:
+                self.timers[user_id].cancel()
+                self.timers[user_id] = None
 
-    def cache_message(self, sender, content):
-        timestamp = datetime.now()
-        self.message_cache.append({"sender": sender, "content": content, "timestamp": timestamp})
-        if len(self.message_cache) > self.max_cache_size:
-            self.message_cache.pop(0)
 
-    def cleanup_expired_messages(self):
-        now = datetime.now()
-        self.message_cache = [
-            msg for msg in self.message_cache
-            if now - msg["timestamp"] <= self.max_message_age
-        ]
-        logger.debug(f"[humanlc] clean cache, current size:{len(self.message_cache)}")
-
-    def get_cached_messages(self):
-        return [f"{msg['sender']}: {msg['content']}" for msg in self.message_cache]
+        combined_content = ""
+        for e_context in messages:
+             combined_content += e_context['context'].content+"
+"
+        
+        combined_reply = Reply(ReplyType.TEXT, f"Combined messages:
+{combined_content}")
+        
+        
+        e_context_to_send = messages[0].copy()
+        e_context_to_send['reply'] = combined_reply
+        e_context_to_send.action = EventAction.CONTINUE #让后续的插件和默认逻辑处理
+        PluginManager().emit_event(EventContext(Event.ON_DECORATE_REPLY, e_context_to_send))
+        PluginManager().emit_event(EventContext(Event.ON_SEND_REPLY, e_context_to_send))
+        
+        logger.debug(f"[humanlc] Processed messages for user {user_id}")
