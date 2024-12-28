@@ -20,7 +20,7 @@ class humanlc(Plugin):
             return  # 只处理文本消息
 
         msg = e_context["context"].content
-        user_id = e_context["context"].user_id
+        user_id = e_context["context"]["user_id"]
         if e_context["context"].get("isgroup", False):
             return  # 跳过群聊消息
 
@@ -43,7 +43,7 @@ class humanlc(Plugin):
                 # 超时线程处理过了，消息传递给下一个流程
                 with self.lock:
                     if user_id in self.accumulated_messages:
-                      self.accumulated_messages[user_id][2].clear() # 清除超时标记
+                      self.accumulated_messages[user_id][2].clear()
                 return
         else:
             # 累积够5条消息
