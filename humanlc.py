@@ -6,7 +6,7 @@ from bridge.reply import Reply, ReplyType
 import time
 import threading
 
-@plugins.register(name="humanlc", desc="A simple plugin", version="0.1", author="Pon")
+@plugins.register(name="humanlc", desc="A simple plugin that delays and accumulates private messages", version="0.1", author="Pon")
 class humanlc(Plugin):
     def __init__(self):
         super().__init__()
@@ -38,16 +38,13 @@ class humanlc(Plugin):
                 threading.Thread(target=self.wait_timeout, args=(user_id, current_time, e_context), daemon=True).start()  # 创建新的线程进行超时等待
                 logger.debug(f"[humanlc] userId:{user_id} accumulate_messages, count:{len(message_list)}, intercept message. content: {e_context['context'].content}")
                 return  # 不设置 e_context.action， 保持默认的 EventAction.CONTINUE
-            else: # 已经超时了，直接返回，清空event
-                with self.lock:
-                    event.clear()
         else:
-             # 累积够5条消息
-             with self.lock:
+            # 累积够5条消息
+            with self.lock:
                 e_context["context"].content = " ".join(message_list)
-                self.accumulated_messages[user_id] = [[], None, event]  # 清空消息列表
-             logger.debug(f"[humanlc] userId:{user_id} accumulate_messages reach 5, pass on to the next level. content: {e_context['context'].content}")
-             return  # 默认传递给下一个流程
+                self.accumulated_messages[user_id] = [[], None, threading.Event()]  # 清空消息列表
+            logger.debug(f"[humanlc] userId:{user_id} accumulate_messages reach 5, pass on to the next level. content: {e_context['context'].content}")
+            return  # 默认传递给下一个流程
 
 
     def wait_timeout(self, user_id, current_time, e_context):
@@ -57,7 +54,7 @@ class humanlc(Plugin):
 
         with self.lock:
             message_list, last_message_time, _ = self.accumulated_messages[user_id]
-            if last_message_time == current_time: # 10秒内没有收到新消息
+            if last_message_time == current_time and len(message_list) > 0: # 10秒内没有收到新消息,并且有消息需要处理
                 e_context["context"].content = " ".join(message_list)
                 self.accumulated_messages[user_id] = [[], None, threading.Event()] # 清空消息列表
                 event.set() # 设置超时
