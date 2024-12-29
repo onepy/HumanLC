@@ -49,18 +49,19 @@ class humanlc(Plugin):
             self.last_message_time[session_id] = current_time  # 更新时间戳
             e_context.action = EventAction.BREAK_PASS # 拦截消息
 
-
     def on_send_reply(self, e_context: EventContext):
         reply = e_context["reply"]
         if not reply or reply.type != ReplyType.TEXT:
             return
+    
 
-        segments = reply.content.split(",")  # 按照逗号分段
+        segments = reply.content.split(",")
         for segment in segments:
-            e_context["channel"].send(Reply(ReplyType.TEXT, segment.strip()), e_context["context"]) # 发送分段回复
-            typing_delay = len(segment.strip()) * 0.1  # 模拟打字延迟，可根据需要调整
-            time.sleep(typing_delay)
-
+            
+            reply_segment = Reply(ReplyType.TEXT, segment.strip())
+            e_context["reply"] = reply_segment  
+            e_context.action = EventAction.CONTINUE  
+            time.sleep(len(segment.strip()) * 0.1)  
 
     def get_help_text(self, **kwargs):
         return "这个插件模拟人类聊天，会延时回复并分段发送消息。"
