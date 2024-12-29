@@ -1,82 +1,68 @@
-# encoding: utf-8
+# encoding:utf-8
 
-import time
 import plugins
+import time
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
+from channel.chat_message import ChatMessage
 from common.log import logger
 from plugins import *
 
 @plugins.register(
-    name="HumanLC",
-    desire_priority=800,
+    name="humanlc",
+    desire_priority=55,  # 默认优先级为0, 您可根据需要进行调整
     hidden=False,
-    desc="Intercepts and concatenates private messages after a timeout or count.",
-    version="0.3",
-    author="Pon",
+    desc="Simulates human chat behavior, delays replies and sends in segments.",
+    version="0.1",
+    author="CAN",
 )
-class HumanLC(Plugin):
+class humanlc(Plugin):
 
     def __init__(self):
         super().__init__()
-        self.intercept_count = 5
-        self.intercepted_messages = {}
-        self.last_message_time = {}
-        self.timeout = 10  # Seconds
         self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
-        logger.info("[HumanLC] Initialized")
+        self.handlers[Event.ON_SEND_REPLY] = self.on_send_reply
+        self.cached_messages = {}  # 存储每个session的缓存消息
+        self.last_message_time = {} # 存储每个session的最后一条消息的时间戳
 
     def on_handle_context(self, e_context: EventContext):
-        context = e_context["context"]
-        if not context.get("isgroup", False):  # Only private messages
-            session_id = context["session_id"]
-            content = context.content
-            current_time = time.time()
-
-            if session_id not in self.intercepted_messages:
-                self.intercepted_messages[session_id] = []
-                
-            if session_id in self.last_message_time:
-                if self.is_timeout(session_id, current_time):
-                    logger.info(f"[HumanLC] Timeout triggered for session {session_id}")
-                    self.process_intercepted_messages(session_id, e_context)
-                    return
-
-            self.last_message_time[session_id] = current_time 
-            self.intercepted_messages[session_id].append(content)
-
-            if len(self.intercepted_messages[session_id]) >= self.intercept_count:
-                logger.info(f"[HumanLC] Intercept count reached for session {session_id}")
-                self.process_intercepted_messages(session_id, e_context)
-            else:
-                e_context.action = EventAction.BREAK_PASS  # Intercept, don't continue yet
-
-        else:
-            e_context.action = EventAction.CONTINUE # Group messages, continue processing
-
-
-    def is_timeout(self, session_id, current_time):
-        """Checks if timeout has occurred."""
-        last_time = self.last_message_time.get(session_id)
-        if last_time:
-            return (current_time - last_time) >= self.timeout
-        return False
-
-    def process_intercepted_messages(self, session_id, e_context):
-        """Processes intercepted messages, concatenates and continues."""
-        concatenated_message = "
-".join(self.intercepted_messages[session_id]) 
-
-        if not concatenated_message.strip():
-            logger.warning("[HumanLC] Concatenated message is empty, skipping processing.")
-            self.intercepted_messages[session_id] = []
-            self.last_message_time[session_id] = time.time()
+        if e_context["context"].type != ContextType.TEXT or e_context["context"].get("isgroup", False):  # 只处理私聊文本消息
             return
 
-        e_context["context"].content = concatenated_message
-        self.intercepted_messages[session_id] = []
-        e_context.action = EventAction.CONTINUE
+        session_id = e_context["context"]["session_id"]
+        current_time = time.time()
+        content = e_context["context"].content
+
+        if session_id not in self.cached_messages:
+            self.cached_messages[session_id] = []
+            self.last_message_time[session_id] = current_time
+
+        if len(self.cached_messages[session_id]) >= 5 or current_time - self.last_message_time[session_id] > 10:
+            combined_content = "
+".join(self.cached_messages[session_id] + [content])  # 拼接消息
+            e_context["context"].content = combined_content
+            self.cached_messages[session_id] = [] #清除缓存消息
+            self.last_message_time[session_id] = current_time  # 更新时间戳
+            e_context.action = EventAction.CONTINUE # 交给默认逻辑或下一个插件处理
+        else:
+            self.cached_messages[session_id].append(content)  # 添加到缓存
+            self.last_message_time[session_id] = current_time  # 更新时间戳
+            e_context.action = EventAction.BREAK_PASS # 拦截消息
+
+
+    def on_send_reply(self, e_context: EventContext):
+        reply = e_context["reply"]
+        if not reply or reply.type != ReplyType.TEXT:
+            return
+
+        segments = reply.content.split(",")  # 按照逗号分段
+        for segment in segments:
+            e_context["channel"].send(Reply(ReplyType.TEXT, segment.strip()), e_context["context"]) # 发送分段回复
+            typing_delay = len(segment.strip()) * 0.1  # 模拟打字延迟，可根据需要调整
+            time.sleep(typing_delay)
+
 
     def get_help_text(self, **kwargs):
-        return "Intercepts and concatenates private messages after a timeout or count."
+        return "这个插件模拟人类聊天，会延时回复并分段发送消息。"
+
 
