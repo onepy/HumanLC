@@ -1,22 +1,21 @@
-# encoding:utf-8
+# encoding: utf-8
 
-import plugins
 import time
+import plugins
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
-from channel.chat_message import ChatMessage
 from common.log import logger
 from plugins import *
 
 @plugins.register(
-    name="humanlc",
+    name="HumanLC",
     desire_priority=55,  # 默认优先级为0, 您可根据需要进行调整
     hidden=False,
     desc="Simulates human chat behavior, delays replies and sends in segments.",
     version="0.1",
     author="CAN",
 )
-class humanlc(Plugin):
+class HumanLC(Plugin):
 
     def __init__(self):
         super().__init__()
@@ -65,5 +64,3 @@ class humanlc(Plugin):
 
     def get_help_text(self, **kwargs):
         return "这个插件模拟人类聊天，会延时回复并分段发送消息。"
-
-
