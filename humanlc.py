@@ -12,7 +12,7 @@ from plugins import *
     desire_priority=800,
     hidden=False,
     desc="Intercepts and concatenates private messages after a timeout or count.",
-    version="0.2",
+    version="0.3",
     author="Pon",
 )
 class HumanLC(Plugin):
@@ -35,24 +35,24 @@ class HumanLC(Plugin):
 
             if session_id not in self.intercepted_messages:
                 self.intercepted_messages[session_id] = []
-                self.last_message_time[session_id] = current_time
+                
+            if session_id in self.last_message_time:
+                if self.is_timeout(session_id, current_time):
+                    logger.info(f"[HumanLC] Timeout triggered for session {session_id}")
+                    self.process_intercepted_messages(session_id, e_context)
+                    return
 
-            # Check timeout *BEFORE* appending the message
-            if self.is_timeout(session_id, current_time):
-                logger.info(f"[HumanLC] Timeout triggered for session {session_id}")
-                self.process_intercepted_messages(session_id, e_context)
-                return  # Important: Exit after processing timeout
-
+            self.last_message_time[session_id] = current_time 
             self.intercepted_messages[session_id].append(content)
 
             if len(self.intercepted_messages[session_id]) >= self.intercept_count:
                 logger.info(f"[HumanLC] Intercept count reached for session {session_id}")
                 self.process_intercepted_messages(session_id, e_context)
-
             else:
                 e_context.action = EventAction.BREAK_PASS  # Intercept, don't continue yet
+
         else:
-            e_context.action = EventAction.CONTINUE  # Group messages, continue processing
+            e_context.action = EventAction.CONTINUE # Group messages, continue processing
 
 
     def is_timeout(self, session_id, current_time):
@@ -65,9 +65,8 @@ class HumanLC(Plugin):
     def process_intercepted_messages(self, session_id, e_context):
         """Processes intercepted messages, concatenates and continues."""
         concatenated_message = "
-".join(self.intercepted_messages[session_id])
+".join(self.intercepted_messages[session_id]) 
 
-        #  检查拼接后的消息是否为空
         if not concatenated_message.strip():
             logger.warning("[HumanLC] Concatenated message is empty, skipping processing.")
             self.intercepted_messages[session_id] = []
@@ -76,8 +75,8 @@ class HumanLC(Plugin):
 
         e_context["context"].content = concatenated_message
         self.intercepted_messages[session_id] = []
-        self.last_message_time[session_id] = time.time()
         e_context.action = EventAction.CONTINUE
 
     def get_help_text(self, **kwargs):
         return "Intercepts and concatenates private messages after a timeout or count."
+
