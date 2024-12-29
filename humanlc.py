@@ -1,66 +1,109 @@
-# encoding: utf-8
+# encoding:utf-8
 
 import time
+import json
+import random
+import os
+import re
+
 import plugins
 from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
 from common.log import logger
 from plugins import *
 
-@plugins.register(
-    name="HumanLC",
-    desire_priority=55,  # 默认优先级为0, 您可根据需要进行调整
-    hidden=False,
-    desc="Simulates human chat behavior, delays replies and sends in segments.",
-    version="0.1",
-    author="CAN",
-)
-class HumanLC(Plugin):
 
+@plugins.register(name="Robot2Human", desc="模拟人类发送消息", version="0.1", author="Your Name", desire_priority=50)
+class Robot2Human(Plugin):
     def __init__(self):
         super().__init__()
         self.handlers[Event.ON_HANDLE_CONTEXT] = self.on_handle_context
         self.handlers[Event.ON_SEND_REPLY] = self.on_send_reply
-        self.cached_messages = {}  # 存储每个session的缓存消息
-        self.last_message_time = {} # 存储每个session的最后一条消息的时间戳
+
+        # 读取配置
+        curdir = os.path.dirname(__file__)
+        config_path = os.path.join(curdir, "config.json")
+
+        if not os.path.exists(config_path):
+            default_config = {
+                "max_cached_records": 16,
+                "max_cached_time": 600,  # 10分钟
+                "tpc": 0.5,  # 打字时间系数
+                "parse_flag": True,
+                "max_len": 5,
+                "truncate": 0.5,
+                "bracket_prob": 0.3
+            }
+            with open(config_path, "w") as f:
+                json.dump(default_config, f, indent=4)
+
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+            self.max_cached_records = config['max_cached_records']
+            self.max_cached_time = config['max_cached_time']
+            self.tpc = config["tpc"]
+            self.parse_flag = config['parse_flag']
+            self.max_len = config['max_len']
+            self.truncate = config["truncate"]
+            self.bracket_prob = config["bracket_prob"]
+
+        self.chat_record = []
+        logger.info("[Robot2Human] inited")
+
+    def check_chat_record(self):
+        self.chat_record = sorted(self.chat_record, key=lambda x: x[2])
+        now = time.time()
+        while self.chat_record and now - self.chat_record[0][2] > self.max_cached_time:
+            del self.chat_record[0]
+        while len(self.chat_record) > self.max_cached_records:
+            del self.chat_record[0]
+
+    def update_chat_record(self, user_id, text, timestamp):
+        self.chat_record.append((user_id, text, timestamp))
+        self.check_chat_record()
 
     def on_handle_context(self, e_context: EventContext):
-        if e_context["context"].type != ContextType.TEXT or e_context["context"].get("isgroup", False):  # 只处理私聊文本消息
+        if e_context['context'].type != ContextType.TEXT:
             return
 
-        session_id = e_context["context"]["session_id"]
-        current_time = time.time()
-        content = e_context["context"].content
+        context = e_context['context']
+        msg = context['msg']
+        if msg:
+            user_id = msg.from_user_id
+            text = msg.content
+            timestamp = msg.create_time
+            self.update_chat_record(user_id, text, timestamp)
 
-        if session_id not in self.cached_messages:
-            self.cached_messages[session_id] = []
-            self.last_message_time[session_id] = current_time
+        e_context.action = EventAction.CONTINUE  # 交给下一个插件或默认逻辑处理
 
-        if len(self.cached_messages[session_id]) >= 5 or current_time - self.last_message_time[session_id] > 10:
-            combined_content = "
-".join(self.cached_messages[session_id] + [content])  # 拼接消息
-            e_context["context"].content = combined_content
-            self.cached_messages[session_id] = [] #清除缓存消息
-            self.last_message_time[session_id] = current_time  # 更新时间戳
-            e_context.action = EventAction.CONTINUE # 交给默认逻辑或下一个插件处理
-        else:
-            self.cached_messages[session_id].append(content)  # 添加到缓存
-            self.last_message_time[session_id] = current_time  # 更新时间戳
-            e_context.action = EventAction.BREAK_PASS # 拦截消息
 
     def on_send_reply(self, e_context: EventContext):
-        reply = e_context["reply"]
-        if not reply or reply.type != ReplyType.TEXT:
-            return
-    
+        if e_context['reply'] and e_context['reply'].type == ReplyType.TEXT:
+            reply_content = e_context['reply'].content
 
-        segments = reply.content.split(",")
-        for segment in segments:
-            
-            reply_segment = Reply(ReplyType.TEXT, segment.strip())
-            e_context["reply"] = reply_segment  
-            e_context.action = EventAction.CONTINUE  
-            time.sleep(len(segment.strip()) * 0.1)  
+            if random.random() < self.bracket_prob:  # 括号
+                reply_content = f"{reply_content}（括号）"
 
-    def get_help_text(self, **kwargs):
-        return "这个插件模拟人类聊天，会延时回复并分段发送消息。"
+            replies = self.split_reply(reply_content)  # 分割回复
+
+            e_context['reply'] = None  # 清空原始回复，防止重复发送
+            for reply_text in replies:
+                reply = Reply(ReplyType.TEXT, reply_text)
+                e_context['channel'].send(reply) # 发送分段回复
+                time.sleep(self.get_type_time(reply_text))
+
+    def split_reply(self, text):
+        if self.parse_flag:
+            replies = re.split(r'[。？！；]', text)
+            replies = [r.strip() for r in replies if r.strip()]
+        else:
+            replies = [text]
+
+        if len(replies) > self.max_len and random.random() < self.truncate:  # 随机截断
+            replies = replies[:self.max_len]
+        return replies
+
+
+    def get_type_time(self, string):
+        return 1.5 + self.tpc * len(string)
+
