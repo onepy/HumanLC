@@ -81,15 +81,16 @@ class Robot2Human(Plugin):
         if e_context['reply'] and e_context['reply'].type == ReplyType.TEXT:
             reply_content = e_context['reply'].content
 
-            if random.random() < self.bracket_prob:  # 括号
+            if random.random() < self.bracket_prob:
                 reply_content = f"{reply_content}（括号）"
 
-            replies = self.split_reply(reply_content)  # 分割回复
+            replies = self.split_reply(reply_content)
 
-            e_context['reply'] = None  # 清空原始回复，防止重复发送
+            e_context['reply'] = None
+            context = e_context['context'] # 获取 context 对象
             for reply_text in replies:
                 reply = Reply(ReplyType.TEXT, reply_text)
-                e_context['channel'].send(reply) # 发送分段回复
+                e_context['channel'].send(context, reply) # 传递 context 给 send 方法
                 time.sleep(self.get_type_time(reply_text))
 
     def split_reply(self, text):
