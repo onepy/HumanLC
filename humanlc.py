@@ -46,48 +46,50 @@ class HumanLC(Plugin):
             logger.error(f"[HumanLC] Initialize failed: {e}")
             raise e
 
-    def on_handle_context(self, e_context: EventContext):
-        context = e_context["context"]
-        
-        # 只处理私聊消息
-        if not context.get("isgroup", False):
-            session_id = context["session_id"]
-            content = context.content
-            current_time = time.time()
+def on_handle_context(self, e_context: EventContext):
+    context = e_context["context"]
+    
+    # 只处理私聊消息
+    if not context.get("isgroup", False):
+        session_id = context["session_id"]
+        content = context.content
+        current_time = time.time()
 
-            # 定期清理过期会话
-            if current_time - self.last_clean_time > self.CLEAN_INTERVAL:
-                self.clean_expired_sessions()
-                self.last_clean_time = current_time
+        # 定期清理过期会话
+        if current_time - self.last_clean_time > self.CLEAN_INTERVAL:
+            self.clean_expired_sessions()
+            self.last_clean_time = current_time
 
-            # 初始化新会话
-            if session_id not in self.intercepted_messages:
-                self.intercepted_messages[session_id] = []
-                self.last_message_time[session_id] = current_time
-
-            # 检查超时
-            if self.is_timeout(session_id, current_time):
-                logger.debug(f"[HumanLC] Timeout triggered for session {session_id}")
-                if self.intercepted_messages[session_id]:  # 只在有消息时处理
-                    self.process_intercepted_messages(session_id, e_context)
-                # 重置后继续处理新消息
-                self.intercepted_messages[session_id] = [content]
-                self.last_message_time[session_id] = current_time
-                return
-
-            # 追加新消息
-            self.intercepted_messages[session_id].append(content)
+        # 初始化新会话
+        if session_id not in self.intercepted_messages:
+            self.intercepted_messages[session_id] = []
             self.last_message_time[session_id] = current_time
 
-            # 检查消息数量
-            if len(self.intercepted_messages[session_id]) >= self.intercept_count:
-                logger.debug(f"[HumanLC] Intercept count reached for session {session_id}")
-                self.process_intercepted_messages(session_id, e_context)
-            else:
-                e_context.action = EventAction.BREAK_PASS  # 继续拦截
+        # 追加新消息
+        self.intercepted_messages[session_id].append(content)
+        
+        # 检查是否需要处理消息
+        should_process = False
+        
+        # 检查消息数量
+        if len(self.intercepted_messages[session_id]) >= self.intercept_count:
+            logger.debug(f"[HumanLC] Intercept count reached for session {session_id}")
+            should_process = True
+            
+        # 检查超时
+        elif self.is_timeout(session_id, current_time):
+            logger.debug(f"[HumanLC] Timeout triggered for session {session_id}")
+            should_process = True
 
+        if should_process:
+            self.process_intercepted_messages(session_id, e_context)
         else:
-            e_context.action = EventAction.CONTINUE  # 群消息直接继续处理
+            # 更新最后消息时间
+            self.last_message_time[session_id] = current_time
+            e_context.action = EventAction.BREAK_PASS  # 继续拦截
+
+    else:
+        e_context.action = EventAction.CONTINUE  # 群消息直接继续处理
 
     def is_timeout(self, session_id, current_time):
         """检查是否超时"""
