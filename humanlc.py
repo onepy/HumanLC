@@ -9,11 +9,11 @@ from plugins import *
 
 @plugins.register(
     name="HumanLC",
-    desire_priority=500,
+    desire_priority=800,
     hidden=False,
     desc="Intercepts and concatenates private messages after a timeout or count.",
-    version="0.6",
-    author="YourName",
+    version="0.2",
+    author="Pon",
 )
 class HumanLC(Plugin):
 
@@ -67,9 +67,17 @@ class HumanLC(Plugin):
     def process_intercepted_messages(self, session_id, e_context):
         """Processes intercepted messages, concatenates and continues."""
         concatenated_message = " ".join(self.intercepted_messages[session_id])
+
+        #  检查拼接后的消息是否为空
+        if not concatenated_message.strip():
+            logger.warning("[HumanLC] Concatenated message is empty, skipping processing.")
+            self.intercepted_messages[session_id] = []
+            self.last_message_time[session_id] = time.time()
+            return
+
         e_context["context"].content = concatenated_message
         self.intercepted_messages[session_id] = []
-        self.last_message_time[session_id] = time.time() # Reset timer AFTER processing
+        self.last_message_time[session_id] = time.time()
         e_context.action = EventAction.CONTINUE
 
     def get_help_text(self, **kwargs):
