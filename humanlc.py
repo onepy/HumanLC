@@ -11,8 +11,8 @@ from plugins import *
     name="SplitReply",
     desc="将机器人生成的回复拆分为多个小句子并延迟发送。",
     version="1.1",
-    author="YourName",
-    desire_priority=0  # 优先级设置为 0，可根据需求调整
+    author="Pon",
+    desire_priority=500  # 优先级设置为 0，可根据需求调整
 )
 class SplitReply(Plugin):
     def __init__(self):
